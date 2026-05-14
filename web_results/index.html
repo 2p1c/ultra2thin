@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultra2Thin — Aluminum Plate Pulse-Echo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1e3a5f,#0f172a);padding:20px 32px;border-bottom:2px solid #334155}
+.header h1{font-size:24px;color:#38bdf8;margin-bottom:6px}
+.header p{font-size:13px;color:#94a3b8;line-height:1.6;max-width:1000px}
+.badge{display:inline-block;background:#1e3a5f;color:#7dd3fc;padding:2px 8px;border-radius:10px;font-size:11px;margin:0 2px}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+.controls{background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.controls label{font-size:12px;color:#94a3b8;display:block;margin-bottom:3px}
+.controls input[type=range]{width:140px;accent-color:#38bdf8}
+.controls button{background:#38bdf8;color:#0f172a;border:none;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+.controls button:hover{background:#7dd3fc}
+.sample-id{font-size:22px;font-weight:700;color:#38bdf8;min-width:60px;text-align:center}
+.summary{background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px}
+.summary h3{color:#38bdf8;margin-bottom:8px;font-size:14px}
+.summary .vals{display:flex;gap:20px;flex-wrap:wrap}
+.summary .v{font-size:18px;font-weight:700}
+.summary .l{font-size:11px;color:#94a3b8}
+.metrics{display:flex;gap:16px;margin:12px 0;flex-wrap:wrap}
+.metric{background:#1e293b;border-radius:8px;padding:12px 18px;text-align:center;min-width:100px}
+.metric .val{font-size:22px;font-weight:700}.metric .lbl{font-size:11px;color:#94a3b8;margin-top:3px}
+.g{color:#4ade80}.w{color:#fbbf24}.r{color:#f87171}
+.main-img{width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
+.footer{text-align:center;padding:20px;color:#64748b;font-size:11px;border-top:1px solid #1e293b;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Aluminum Plate — Through-Thickness Pulse-Echo Thickness Prediction</h1>
+  <p>
+    <span class="badge">200-700 kHz Laser Source</span>
+    <span class="badge">Al 6300 m/s</span>
+    <span class="badge">4 mm Nominal</span>
+    <span class="badge">Terrace FBH Defects</span>
+    <span class="badge">Back-Side Measurement</span>
+  </p>
+  <p style="margin-top:6px">
+    Pulse-echo through-thickness | Image-method path | CNN + Fourier + Transformer | Cubic interpolation
+  </p>
+</div>
+
+<div class="container">
+  <div class="summary" id="summary"></div>
+
+  <div class="controls">
+    <div><label>Sample Index</label><input type="range" id="slider" min="0" max="23" value="0" step="1"></div>
+    <div class="sample-id" id="sampleId">#0</div>
+    <div><button id="autoBtn" onclick="toggleAuto()">Auto Play</button></div>
+    <div><label>Speed</label><input type="range" id="speed" min="400" max="3000" value="1500" step="100"></div>
+  </div>
+
+  <div class="metrics" id="metrics"></div>
+  <img id="mainImg" class="main-img" src="images/sample_0.png" alt="">
+</div>
+
+<div class="footer">Ultra2Thin Aluminum · PyTorch · Pulse-Echo · Fourier Encoding · Transformer Self-Attention</div>
+
+<script>
+let data=null,idx=0,auto=false,timer=null;
+fetch('samples.json').then(r=>r.json()).then(d=>{
+  data=d;
+  document.getElementById('summary').innerHTML=
+    '<h3>Summary (24 test samples)</h3><div class="vals">'+
+    '<div><div class="v" style="color:#4ade80">'+d.summary.mean_mae.toFixed(4)+' ± '+d.summary.std_mae.toFixed(4)+'</div><div class="l">MAE [mm]</div></div>'+
+    '<div><div class="v" style="color:#7dd3fc">'+d.summary.mean_corr.toFixed(4)+' ± '+d.summary.std_corr.toFixed(4)+'</div><div class="l">Correlation</div></div>'+
+    '<div><div class="v" style="color:#fbbf24">'+d.summary.val_loss.toFixed(6)+'</div><div class="l">Val MSE</div></div>'+
+    '</div>';
+  update(0);
+});
+function update(i){
+  idx=i;const s=data.samples[i];
+  document.getElementById('sampleId').textContent='#'+i;
+  document.getElementById('slider').value=i;
+  document.getElementById('mainImg').src='images/sample_'+i+'.png';
+  const cc=s.corr_2d>0.95?'g':(s.corr_2d>0.8?'w':'r');
+  document.getElementById('metrics').innerHTML=
+    '<div class="metric"><div class="val '+cc+'">'+(s.corr_2d*100).toFixed(1)+'%</div><div class="lbl">Corr (2D)</div></div>'+
+    '<div class="metric"><div class="val '+cc+'">'+(s.corr_pts*100).toFixed(1)+'%</div><div class="lbl">Corr (pts)</div></div>'+
+    '<div class="metric"><div class="val">'+s.mae_2d.toFixed(4)+'</div><div class="lbl">MAE 2D [mm]</div></div>'+
+    '<div class="metric"><div class="val">'+s.mae_pts.toFixed(4)+'</div><div class="lbl">MAE pts [mm]</div></div>'+
+    '<div class="metric"><div class="val" style="color:#7dd3fc">'+s.n_pts+'</div><div class="lbl">Measurement Pts</div></div>'+
+    '<div class="metric"><div class="val" style="color:#fbbf24">'+s.gt_range[0]+' - '+s.gt_range[1]+'</div><div class="lbl">Thickness Range [mm]</div></div>';
+}
+document.getElementById('slider').addEventListener('input',function(){update(+this.value)});
+function toggleAuto(){
+  auto=!auto;const b=document.getElementById('autoBtn');
+  if(auto){b.textContent='Stop';b.style.background='#f87171';advance()}
+  else{b.textContent='Auto Play';b.style.background='#38bdf8';clearTimeout(timer)}
+}
+function advance(){if(!auto)return;update((idx+1)%data.samples.length);timer=setTimeout(advance,+document.getElementById('speed').value)}
+</script>
+</body>
+</html>

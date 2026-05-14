@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultra2Thin v2 — 灵活点阵厚度预测</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1e3a5f,#0f172a);padding:20px 32px;border-bottom:2px solid #334155}
+.header h1{font-size:24px;color:#38bdf8;margin-bottom:6px}
+.header p{font-size:13px;color:#94a3b8;line-height:1.6;max-width:1000px}
+.badge{display:inline-block;background:#1e3a5f;color:#7dd3fc;padding:2px 8px;border-radius:10px;font-size:11px;margin:0 2px}
+.container{max-width:1100px;margin:0 auto;padding:20px}
+.controls{background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.controls label{font-size:12px;color:#94a3b8;display:block;margin-bottom:3px}
+.controls input[type=range]{width:140px;accent-color:#38bdf8}
+.controls button{background:#38bdf8;color:#0f172a;border:none;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+.controls button:hover{background:#7dd3fc}
+.sample-id{font-size:22px;font-weight:700;color:#38bdf8;min-width:60px;text-align:center}
+.metrics{display:flex;gap:16px;margin:12px 0;flex-wrap:wrap}
+.metric{background:#1e293b;border-radius:8px;padding:12px 18px;text-align:center;min-width:100px}
+.metric .val{font-size:22px;font-weight:700}.metric .lbl{font-size:11px;color:#94a3b8;margin-top:3px}
+.g{color:#4ade80}.w{color:#fbbf24}.r{color:#f87171}
+.main-img{width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
+.row{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap}
+.card{flex:1;min-width:280px;background:#1e293b;border-radius:10px;padding:18px}
+.card h3{color:#38bdf8;margin-bottom:10px;font-size:14px}
+.card pre{font-size:11px;color:#94a3b8;line-height:1.7;white-space:pre-wrap}
+.footer{text-align:center;padding:20px;color:#64748b;font-size:11px;border-top:1px solid#1e293b;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔬 Ultra2Thin v2 — 灵活点阵·单点信号→厚度</h1>
+  <p>
+    <span class="badge">1D-CNN 信号编码</span> →
+    <span class="badge">Fourier 位置编码 (绝对+相对源+距离+方向)</span> →
+    <span class="badge">Transformer 点间自注意力</span> →
+    <span class="badge">逐点厚度预测</span> →
+    <span class="badge">空间插值→2D厚度图</span>
+  </p>
+  <p style="margin-top:6px">
+    支持任意点阵大小、任意激励源位置 | Born散射物理 | 407K参数 | 85%+ MSE提升 | 相关系数 >0.99
+  </p>
+</div>
+
+<div class="container">
+  <div class="controls">
+    <div><label>样本索引</label><input type="range" id="slider" min="0" max="23" value="0" step="1"></div>
+    <div class="sample-id" id="sampleId">#0</div>
+    <div><button id="autoBtn" onclick="toggleAuto()">▶ 自动播放</button></div>
+    <div><label>播放速度</label><input type="range" id="speed" min="400" max="3000" value="1500" step="100"></div>
+  </div>
+
+  <div class="metrics" id="metrics"></div>
+  <img id="mainImg" class="main-img" src="images/sample_0.png" alt="">
+
+  <div class="row">
+    <div class="card">
+      <h3>📐 新架构 vs 旧架构</h3>
+      <pre>
+<b style="color:#38bdf8">v1 (旧):</b>
+  固定16接收器 4×4 → 整张32×32厚度图
+  源位置固定 · 点阵大小固定
+  <b style="color:#f87171">✗ 采集方式受限</b>
+
+<b style="color:#4ade80">v2 (新):</b>
+  N个任意位置测量点 → N个逐点厚度
+  → 空间插值 → 2D厚度图
+  源位置可变 · 点阵大小可变 (9~64点)
+  <b style="color:#4ade80">✓ 灵活采集</b>
+
+<b style="color:#7dd3fc">逐点编码:</b>
+  signal → CNN → 信号特征
+  pos → Fourier(绝对位置)
+  pos-src → Fourier(相对源向量)
+  ||pos-src|| → Fourier(距离)
+  angle → sin/cos(方向)
+  → 拼接投影 → 128D 逐点特征
+      </pre>
+    </div>
+    <div class="card">
+      <h3>🔬 编解码信息流</h3>
+      <pre>
+<b style="color:#7dd3fc">每个测量点编码 (GeometryEncoder):</b>
+  FourierFeatures(绝对位置, 12频) → 48D
+  FourierFeatures(相对源, 12频) → 48D
+  FourierFeatures(距离, 8频) → 16D
+  sin(角度), cos(角度) → 2D
+  ─────────────────────────
+  拼接 → Linear→LN→ReLU→Linear → 128D
+
+<b style="color:#7dd3fc">点间信息共享:</b>
+  3层 Transformer (4头)
+  各点互相查询空间上下文
+
+<b style="color:#7dd3fc">2D可视化:</b>
+  逐点预测 → cubic插值 → 32×32厚度图
+      </pre>
+    </div>
+  </div>
+</div>
+
+<div class="footer">Ultra2Thin v2 · PyTorch · Born Scattering · Fourier Position Encoding · Self-Attention</div>
+
+<script>
+let samples=[],idx=0,auto=false,timer=null;
+fetch('samples.json').then(r=>r.json()).then(d=>{samples=d;update(0)});
+function update(i){
+  idx=i;const s=samples[i];
+  document.getElementById('sampleId').textContent='#'+i;
+  document.getElementById('slider').value=i;
+  document.getElementById('mainImg').src='images/sample_'+i+'.png';
+  const cc=s.corr>0.95?'g':(s.corr>0.8?'w':'r');
+  document.getElementById('metrics').innerHTML=
+    `<div class="metric"><div class="val ${cc}">${(s.corr*100).toFixed(1)}%</div><div class="lbl">相关系数</div></div>
+     <div class="metric"><div class="val">${s.mae.toFixed(4)}</div><div class="lbl">MAE [mm]</div></div>
+     <div class="metric"><div class="val" style="color:#7dd3fc">${s.n_pts}</div><div class="lbl">测量点数</div></div>
+     <div class="metric"><div class="val" style="color:#a78bfa">(${s.src[0]},${s.src[1]})</div><div class="lbl">激励源位置</div></div>
+     <div class="metric"><div class="val" style="color:#fbbf24">${s.gt_range[0]}–${s.gt_range[1]}</div><div class="lbl">厚度范围 [mm]</div></div>`;
+}
+document.getElementById('slider').addEventListener('input',function(){update(+this.value)});
+function toggleAuto(){
+  auto=!auto;const b=document.getElementById('autoBtn');
+  if(auto){b.textContent='⏸ 停止';b.style.background='#f87171';advance()}
+  else{b.textContent='▶ 自动播放';b.style.background='#38bdf8';clearTimeout(timer)}
+}
+function advance(){if(!auto)return;update((idx+1)%samples.length);timer=setTimeout(advance,+document.getElementById('speed').value)}
+</script>
+</body>
+</html>

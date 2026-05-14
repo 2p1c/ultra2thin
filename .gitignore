@@ -1,0 +1,7 @@
+__pycache__/
+checkpoints/
+web_results/images/
+web_v2/images/
+web_v3/images/
+*.png
+.DS_Store
