@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model Comparison — 500 Plates/epoch vs 6 Plates</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b1120;color:#e2e8f0;min-height:100vh}
+.bar{background:linear-gradient(135deg,#1a2740,#0b1120);padding:18px 28px;border-bottom:2px solid #1e3a5f}
+.bar h1{font-size:22px;color:#38bdf8}.bar p{font-size:12px;color:#7c94b0;margin-top:4px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;margin:0 2px}
+.bg{background:#1e3a5f;color:#7dd3fc}.bo{background:#3b1f5f;color:#c084fc}
+.container{max-width:1100px;margin:0 auto;padding:20px}
+
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.card{background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;padding:18px}
+.card h3{font-size:14px;margin-bottom:12px}
+.card.o h3{color:#38bdf8}.card.f h3{color:#c084fc}
+.metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.metric{text-align:center;padding:8px}
+.metric .v{font-size:24px;font-weight:700}.metric .l{font-size:10px;color:#7c94b0;margin-top:2px}
+.g{color:#4ade80}.b{color:#38bdf8}.p{color:#c084fc}.w{color:#fbbf24}.r{color:#f87171}
+
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.chart{background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;padding:14px}
+.chart h4{font-size:12px;color:#7c94b0;margin-bottom:8px}
+.chart canvas{width:100%;height:200px}
+
+.comparison-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}
+.comparison-table th{background:#111c2e;color:#7c94b0;padding:10px 14px;text-align:left;font-weight:500;border-bottom:1px solid #1e3a5f}
+.comparison-table td{padding:10px 14px;border-bottom:1px solid #0f1a2e}
+.comparison-table .winner{color:#4ade80;font-weight:600}
+.comparison-table .ratio{font-size:11px;color:#64748b}
+
+.gallery{margin-top:24px}
+.gallery h3{font-size:16px;color:#38bdf8;margin-bottom:12px}
+.gallery img{width:100%;border-radius:8px;margin-bottom:12px;border:1px solid #1e3a5f}
+
+.tabs{display:flex;gap:0;margin-bottom:16px}
+.tab{padding:8px 18px;cursor:pointer;font-size:12px;color:#7c94b0;background:#111c2e;border:1px solid #1e3a5f;border-bottom:none;border-radius:6px 6px 0 0;margin-right:-1px}
+.tab.active{color:#38bdf8;background:#1a2740;border-color:#38bdf8}
+
+.hint{font-size:11px;color:#64748b;margin:8px 0 16px}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>训练策略对比</h1>
+  <p>
+    <span class="badge bg">Original: 500 独特板/epoch × 40 epochs</span>
+    <span style="margin:0 6px">vs</span>
+    <span class="badge bo">Few-Plates: 6 块板 × 80 源位置 × 32 epochs</span>
+    <span style="margin-left:8px;font-size:11px;color:#64748b">200 张相同测试板评估</span>
+  </p>
+</div>
+
+<div class="container">
+
+<div class="summary">
+  <div class="card o">
+    <h3>Original — 500 独特板/epoch（理想实验）</h3>
+    <div class="metrics" id="origMetrics"></div>
+  </div>
+  <div class="card f">
+    <h3>Few-Plates — 6 块板 × 80 源位置（可行实验）</h3>
+    <div class="metrics" id="fewMetrics"></div>
+  </div>
+</div>
+
+<table class="comparison-table">
+  <tr><th>指标</th><th>Original (500板/epoch)</th><th>Few-Plates (6板)</th><th>退化</th></tr>
+  <tbody id="compTable"></tbody>
+</table>
+
+<div class="charts">
+  <div class="chart">
+    <h4>MSE Distribution（低=好）</h4>
+    <canvas id="mseChart"></canvas>
+  </div>
+  <div class="chart">
+    <h4>Correlation Distribution（高=好）</h4>
+    <canvas id="corrChart"></canvas>
+  </div>
+</div>
+
+<div class="gallery">
+  <h3>直观对比 — 最好 / 中等 / 最差案例（以 Few-Plates 排序）</h3>
+  <p class="hint">每张图：左两列=Original，右两列=Few-Plates。每侧上排=预测结果，下排左=误差图，下排右=散点图</p>
+  <img src="images/compare_best.png" alt="Best case" loading="lazy">
+  <img src="images/compare_median.png" alt="Median case" loading="lazy">
+  <img src="images/compare_worst.png" alt="Worst case" loading="lazy">
+</div>
+
+</div>
+
+<script src="comparison_data.js"></script>
+<script>
+(function() {
+var D = COMP;
+
+function pct(v, bl) { return ((bl - v) / bl * 100).toFixed(1) + '%'; }
+
+// Summary cards
+document.getElementById('origMetrics').innerHTML =
+  '<div class="metric"><div class="v g">'+D.orig.mse_mean.toFixed(4)+'</div><div class="l">MSE</div></div>'+
+  '<div class="metric"><div class="v b">'+D.orig.mae_mean.toFixed(4)+'</div><div class="l">MAE [mm]</div></div>'+
+  '<div class="metric"><div class="v g">'+D.orig.corr_mean.toFixed(4)+'</div><div class="l">Correlation</div></div>';
+
+document.getElementById('fewMetrics').innerHTML =
+  '<div class="metric"><div class="v w">'+D.few.mse_mean.toFixed(4)+'</div><div class="l">MSE</div></div>'+
+  '<div class="metric"><div class="v p">'+D.few.mae_mean.toFixed(4)+'</div><div class="l">MAE [mm]</div></div>'+
+  '<div class="metric"><div class="v w">'+D.few.corr_mean.toFixed(4)+'</div><div class="l">Correlation</div></div>';
+
+// Comparison table
+var rows = [
+  ['MSE', D.orig.mse_mean.toFixed(4)+' ± '+D.orig.mse_std.toFixed(4), D.few.mse_mean.toFixed(4)+' ± '+D.few.mse_std.toFixed(4), (D.few.mse_mean/D.orig.mse_mean).toFixed(1)+'×', 'g'],
+  ['MAE [mm]', D.orig.mae_mean.toFixed(4), D.few.mae_mean.toFixed(4), (D.few.mae_mean/D.orig.mae_mean).toFixed(1)+'×', 'g'],
+  ['Correlation', D.orig.corr_mean.toFixed(4), D.few.corr_mean.toFixed(4), (D.orig.corr_mean/D.few.corr_mean).toFixed(2)+'×', 'r'],
+  ['vs Baseline', pct(D.orig.mse_mean, D.baseline), pct(D.few.mse_mean, D.baseline), '—', ''],
+];
+document.getElementById('compTable').innerHTML = rows.map(function(r) {
+  return '<tr><td>'+r[0]+'</td><td class="winner">'+r[1]+'</td><td>'+r[2]+'</td><td style="color:#64748b">'+r[3]+'</td></tr>';
+}).join('');
+
+// Charts
+function drawHist(canvasId, bins, edges, color, color2) {
+  var cv = document.getElementById(canvasId);
+  var W = cv.width = cv.clientWidth * 2, H = cv.height = cv.clientHeight * 2;
+  var ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  var pad = {l:50, r:20, t:10, b:30}, pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+  var maxH = Math.max.apply(null, bins);
+  var bw = pw / bins.length;
+
+  ctx.fillStyle = 'rgba(56,189,248,0.3)';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  for (var i = 0; i < bins.length; i++) {
+    var x = pad.l + i*bw, y = pad.t + ph - (bins[i]/maxH)*ph, h = (bins[i]/maxH)*ph;
+    ctx.fillRect(x, y, bw-1, h);
+    ctx.strokeRect(x, y, bw-1, h);
+  }
+  // axis labels
+  ctx.fillStyle = '#7c94b0'; ctx.font = '9px monospace';
+  ctx.fillText(edges[0].toFixed(1), pad.l, H-pad.b+14);
+  ctx.fillText(edges[edges.length-1].toFixed(1), pad.l+pw-20, H-pad.b+14);
+}
+
+// Draw both histograms on same chart
+function drawDualHist(canvasId, bins1, bins2, edges, color1, color2, label1, label2) {
+  var cv = document.getElementById(canvasId);
+  var W = cv.width = cv.clientWidth * 2, H = cv.height = cv.clientHeight * 2;
+  var ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  var pad = {l:45, r:20, t:10, b:30}, pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+  var maxH = Math.max(Math.max.apply(null, bins1), Math.max.apply(null, bins2));
+  var bw = pw / bins1.length;
+
+  // bins1 behind, bins2 in front
+  ctx.fillStyle = 'rgba(56,189,248,0.25)';
+  ctx.strokeStyle = color1; ctx.lineWidth = 1.5;
+  for (var i = 0; i < bins1.length; i++) {
+    var x = pad.l + i*bw;
+    ctx.fillRect(x, pad.t+ph-(bins1[i]/maxH)*ph, bw-1, (bins1[i]/maxH)*ph);
+    ctx.strokeRect(x, pad.t+ph-(bins1[i]/maxH)*ph, bw-1, (bins1[i]/maxH)*ph);
+  }
+  ctx.fillStyle = 'rgba(192,132,252,0.3)';
+  ctx.strokeStyle = color2; ctx.lineWidth = 1.5;
+  for (var i = 0; i < bins2.length; i++) {
+    var x = pad.l + i*bw;
+    ctx.fillRect(x, pad.t+ph-(bins2[i]/maxH)*ph, bw-1, (bins2[i]/maxH)*ph);
+    ctx.strokeRect(x, pad.t+ph-(bins2[i]/maxH)*ph, bw-1, (bins2[i]/maxH)*ph);
+  }
+  // legend
+  ctx.fillStyle = color1; ctx.fillRect(pad.l, pad.t+2, 10, 10);
+  ctx.fillStyle = '#94a3b8'; ctx.font = '9px monospace'; ctx.fillText(label1, pad.l+14, pad.t+11);
+  ctx.fillStyle = color2; ctx.fillRect(pad.l+80, pad.t+2, 10, 10);
+  ctx.fillText(label2, pad.l+94, pad.t+11);
+  // axis
+  ctx.fillStyle = '#7c94b0'; ctx.fillText(edges[0].toFixed(1), pad.l, H-pad.b+14);
+  ctx.fillText(edges[edges.length-1].toFixed(1), pad.l+pw-20, H-pad.b+14);
+}
+
+drawDualHist('mseChart', D.hist_mse_orig, D.hist_mse_few, D.bin_edges_mse, '#38bdf8', '#c084fc', 'Original', 'Few-Plates');
+drawDualHist('corrChart', D.hist_corr_orig, D.hist_corr_few, D.bin_edges_corr, '#38bdf8', '#c084fc', 'Original', 'Few-Plates');
+
+})();
+</script>
+</body>
+</html>

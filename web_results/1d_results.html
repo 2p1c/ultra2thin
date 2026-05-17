@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1D Line Model — COMSOL Cross-Section Predictions</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b1120;color:#e2e8f0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1a2740,#0b1120);padding:22px 32px;border-bottom:2px solid #1e3a5f}
+.header h1{font-size:24px;color:#38bdf8;margin-bottom:6px}
+.header .sub{font-size:12px;color:#7c94b0;margin-top:4px}
+.badge{display:inline-block;background:#1e3a5f;color:#7dd3fc;padding:2px 10px;border-radius:10px;font-size:11px;margin:2px 3px}
+.container{max-width:1200px;margin:0 auto;padding:20px 24px}
+.section{display:none}.section.active{display:block}
+
+.tabs{display:flex;gap:0;margin-bottom:20px}
+.tab{padding:10px 22px;cursor:pointer;font-size:13px;color:#7c94b0;background:#111c2e;border:1px solid #1e3a5f;margin-right:-1px;border-radius:6px 6px 0 0}
+.tab.active{color:#38bdf8;background:#1a2740;border-color:#38bdf8}
+
+.summary-cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.card{background:#111c2e;border-radius:10px;padding:16px 22px;border:1px solid #1e3a5f;min-width:140px;text-align:center}
+.card .val{font-size:26px;font-weight:700;line-height:1.2}
+.card .lbl{font-size:11px;color:#7c94b0;margin-top:4px}
+.g{color:#4ade80}.b{color:#38bdf8}.y{color:#fbbf24}
+
+.pred-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.pred-card{background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;overflow:hidden;cursor:pointer;transition:border-color .2s}
+.pred-card:hover{border-color:#38bdf8}
+.pred-card img{width:100%;display:block}
+.pred-card .meta{padding:8px 12px;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between;flex-wrap:wrap}
+
+.slider-row{display:flex;align-items:center;gap:12px;margin:16px 0}
+.slider-row input[type=range]{flex:1;accent-color:#38bdf8}
+.slider-row .val{font-size:18px;font-weight:700;color:#38bdf8;min-width:40px}
+.slider-row button{background:#38bdf8;color:#0b1120;border:none;padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px}
+.slider-row button:hover{background:#7dd3fc}
+
+.overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.88);z-index:100;padding:30px;overflow:auto}
+.overlay.active{display:flex;align-items:flex-start;justify-content:center}
+.overlay img{max-width:95vw;border-radius:12px}
+.overlay .close{position:fixed;top:16px;right:24px;font-size:32px;color:#fff;cursor:pointer;z-index:101}
+
+.footer{text-align:center;padding:20px;color:#4a5568;font-size:11px;border-top:1px solid #1e3a5f;margin-top:30px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>1D Line Thickness Prediction — COMSOL Cross-Section</h1>
+  <div class="sub">
+    <span class="badge">64-cell 1D Profile</span>
+    <span class="badge">16–64 Measurement Points</span>
+    <span class="badge">A0 Lamb Wave 1D</span>
+    <span class="badge">Signal CNN + Transformer</span>
+    <span class="badge">403K Params</span>
+  </div>
+</div>
+
+<div class="container">
+
+<div class="tabs">
+  <div class="tab active" data-tab="gallery">Prediction Gallery</div>
+  <div class="tab" data-tab="detail">Detail View</div>
+</div>
+
+<div id="sec-gallery" class="section active">
+  <div class="summary-cards" id="summaryCards"></div>
+  <h2 style="margin:16px 0 12px;color:#38bdf8;font-size:18px">24 Test Samples</h2>
+  <p style="font-size:12px;color:#7c94b0;margin-bottom:16px">
+    Each card: thickness profile (GT vs Pred) | scatter plot | signal heatmap | per-point error
+  </p>
+  <div class="pred-grid" id="predGrid"></div>
+</div>
+
+<div id="sec-detail" class="section">
+  <h2 style="margin:16px 0 12px;color:#38bdf8;font-size:18px">Single Sample Detail</h2>
+  <div class="slider-row">
+    <span style="font-size:12px;color:#94a3b8">Sample:</span>
+    <input type="range" id="slider" min="0" max="23" value="0" step="1">
+    <span class="val" id="sampleId">#0</span>
+    <button id="autoBtn">▶ Auto Play</button>
+    <span style="font-size:11px;color:#64748b">Speed</span>
+    <input type="range" id="speedR" min="400" max="3000" value="1500" step="100" style="flex:0;width:100px">
+  </div>
+  <div id="detailMetrics" class="summary-cards"></div>
+  <img id="detailImg" style="width:100%;border-radius:10px;border:1px solid #1e3a5f" src="images_1d/pred_0.png" alt="">
+</div>
+
+</div>
+
+<div class="footer">1D Line · 64 cells · Lamb A0 Dispersion · CNN + Fourier 1D + Transformer · 403K Params</div>
+
+<div class="overlay" id="overlay" onclick="closeOverlay()">
+  <span class="close">&times;</span>
+  <img id="overlayImg" src="" alt="">
+</div>
+
+<script src="data_1d.js"></script>
+<script>
+(function() {
+var D = D1;
+
+document.querySelectorAll('.tab').forEach(function(t) {
+  t.addEventListener('click', function() {
+    var n = this.dataset.tab;
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+    this.classList.add('active');
+    document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});
+    document.getElementById('sec-'+n).classList.add('active');
+  });
+});
+
+var s = D.summary;
+document.getElementById('summaryCards').innerHTML =
+  '<div class="card"><div class="val b">'+s.mean_mae.toFixed(4)+'</div><div class="lbl">Mean MAE [mm]</div></div>'+
+  '<div class="card"><div class="val b">±'+s.std_mae.toFixed(4)+'</div><div class="lbl">Std MAE [mm]</div></div>'+
+  '<div class="card"><div class="val y">'+s.mean_corr.toFixed(4)+'</div><div class="lbl">Mean Correlation</div></div>'+
+  '<div class="card"><div class="val y">±'+s.std_corr.toFixed(4)+'</div><div class="lbl">Std Correlation</div></div>'+
+  '<div class="card"><div class="val g">'+s.val_loss.toFixed(6)+'</div><div class="lbl">Best Val MSE</div></div>';
+
+var html = '';
+D.predictions.forEach(function(p, i) {
+  var cc = p.corr > 0.7 ? '#4ade80' : (p.corr > 0.3 ? '#fbbf24' : '#f87171');
+  html += '<div class="pred-card" onclick="openOverlay(\'images_1d/pred_'+i+'.png\')">'+
+    '<img src="images_1d/pred_'+i+'.png" alt="Pred '+i+'" loading="lazy">'+
+    '<div class="meta">'+
+      '<span style="color:'+cc+';font-weight:600">MAE '+p.mae.toFixed(4)+' mm</span>'+
+      '<span style="color:'+cc+';font-weight:600">Corr '+p.corr.toFixed(4)+'</span>'+
+      '<span style="color:#94a3b8">'+p.n_pts+' pts</span>'+
+    '</div></div>';
+});
+document.getElementById('predGrid').innerHTML = html;
+
+var idx = 0, timer = null, playing = false;
+function showDetail(i) {
+  idx = i; var p = D.predictions[i];
+  document.getElementById('slider').value = i;
+  document.getElementById('sampleId').textContent = '#'+i;
+  document.getElementById('detailImg').src = 'images_1d/pred_'+i+'.png';
+  var cc = p.corr > 0.7 ? 'g' : (p.corr > 0.3 ? 'y' : 'r');
+  document.getElementById('detailMetrics').innerHTML =
+    '<div class="card"><div class="val b">'+p.mae.toFixed(4)+'</div><div class="lbl">MAE [mm]</div></div>'+
+    '<div class="card"><div class="val '+cc+'">'+p.corr.toFixed(4)+'</div><div class="lbl">Correlation</div></div>'+
+    '<div class="card"><div class="val" style="color:#38bdf8">'+p.n_pts+'</div><div class="lbl">Measurement Pts</div></div>'+
+    '<div class="card"><div class="val" style="color:#fbbf24">'+p.t_range[0]+'–'+p.t_range[1]+'</div><div class="lbl">Thickness [mm]</div></div>'+
+    '<div class="card"><div class="val" style="color:#94a3b8">'+p.src.toFixed(1)+'</div><div class="lbl">Source Position</div></div>';
+}
+document.getElementById('slider').addEventListener('input', function(){showDetail(+this.value)});
+document.getElementById('autoBtn').addEventListener('click', function() {
+  playing = !playing;
+  var b = document.getElementById('autoBtn');
+  if (playing) { b.textContent = '⏸ Stop'; b.style.background = '#f87171'; advance(); }
+  else { b.textContent = '▶ Auto Play'; b.style.background = '#38bdf8'; clearTimeout(timer); }
+});
+function advance() { if(!playing)return; idx=(idx+1)%D.predictions.length; showDetail(idx); timer=setTimeout(advance,+document.getElementById('speedR').value); }
+showDetail(0);
+
+window.openOverlay = function(src) {
+  document.getElementById('overlayImg').src = src;
+  document.getElementById('overlay').classList.add('active');
+};
+window.closeOverlay = function() { document.getElementById('overlay').classList.remove('active'); };
+document.addEventListener('keydown', function(e){if(e.key==='Escape')closeOverlay()});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lamb Wave Propagation Visualizer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b1120;color:#e2e8f0;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.bar{background:#111c2e;padding:8px 16px;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:44px}
+.bar h1{font-size:15px;color:#38bdf8;white-space:nowrap}
+.bar select,.bar button{background:#1a2740;color:#e2e8f0;border:1px solid #334155;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer}
+.bar button:hover{background:#1e3a5f}
+.bar button.on{background:#38bdf8;color:#0b1120}
+.main{flex:1;display:flex;min-height:0}
+.left{width:300px;min-width:260px;border-right:1px solid #1e3a5f;display:flex;flex-direction:column;background:#0f172a}
+.center{flex:1;display:flex;flex-direction:column;position:relative;min-width:0}
+.right{width:340px;min-width:280px;border-left:1px solid #1e3a5f;display:flex;flex-direction:column;background:#0f172a}
+
+.hdr{font-size:11px;color:#7c94b0;padding:6px 10px;background:#111c2e;border-bottom:1px solid #1e3a5f;font-weight:600;flex-shrink:0}
+.cwrap{flex:1;position:relative;min-height:0}
+.cwrap canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+
+.timeline{display:flex;align-items:center;gap:8px;padding:6px 12px;background:#111c2e;border-top:1px solid #1e3a5f;flex-shrink:0}
+.timeline input[type=range]{flex:1;accent-color:#38bdf8}
+.timeline .tv{font-size:10px;color:#38bdf8;min-width:44px;text-align:center}
+
+.info{display:flex;gap:8px;padding:5px 10px;font-size:9px;color:#7c94b0;flex-wrap:wrap;flex-shrink:0}
+.info span{padding:1px 5px;background:#1a2740;border-radius:3px}
+.hl{color:#38bdf8}
+.btm{height:28px;background:#111c2e;border-top:1px solid #1e3a5f;display:flex;align-items:center;padding:0 10px;gap:8px;font-size:10px;color:#64748b;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>Lamb A0 Wave Propagation</h1>
+  <select id="sampleSel"><option value="0">Sample 0</option><option value="1">Sample 1</option><option value="2">Sample 2</option></select>
+  <button id="playBtn" class="on">⏸ Pause</button>
+  <button id="stepB10">⏮ −10</button>
+  <button id="stepF10">⏭ +10</button>
+  <span style="font-size:11px;color:#7c94b0">Speed</span>
+  <input type="range" id="speedR" min="1" max="15" value="4" step="1" style="width:70px;accent-color:#38bdf8">
+  <span style="flex:1"></span>
+  <span style="font-size:10px;color:#64748b">Click plate to inspect</span>
+</div>
+
+<div class="main">
+  <!-- Left -->
+  <div class="left">
+    <div class="hdr">Source Pulse</div>
+    <div class="cwrap" style="height:110px"><canvas id="srcCv"></canvas></div>
+    <div class="hdr">Thickness Map</div>
+    <div class="cwrap" style="flex:1"><canvas id="tmapCv"></canvas></div>
+    <div class="info" id="sampleInf"></div>
+  </div>
+
+  <!-- Center: wave field -->
+  <div class="center">
+    <div class="cwrap" style="flex:1"><canvas id="waveCv"></canvas></div>
+    <div class="timeline">
+      <span style="font-size:10px;color:#64748b">t =</span>
+      <input type="range" id="timeSl" min="0" max="127" value="0" step="1">
+      <span class="tv" id="timeVal">0.00 μs</span>
+      <span style="font-size:10px;color:#555">#<span id="frameVal">0</span></span>
+    </div>
+    <div class="btm">
+      <span style="color:#f87171">●</span> Source
+      <span>|</span>
+      <span style="color:#4ade80">■</span> +amp
+      <span style="color:#0b1120;background:#334155;padding:0 4px;border-radius:2px">■</span> 0
+      <span style="color:#f87171">■</span> −amp
+      <span>|</span>
+      <span id="selInfo" style="color:#64748b">Click plate to select a point</span>
+    </div>
+  </div>
+
+  <!-- Right: waveform -->
+  <div class="right">
+    <div class="hdr" id="sigHdr">Point Waveform (click on plate)</div>
+    <div class="cwrap" style="flex:1"><canvas id="sigCv"></canvas></div>
+    <div class="info" id="pointInf">No point selected</div>
+  </div>
+</div>
+
+<script src="propagation_data.js"></script>
+<script>
+(function() {
+var D = PROP;
+var G = 32; // grid size
+var curSample = 0, curFrame = 0, playing = true;
+var selIdx = 0; // selected measurement point index
+var timer = null, lastT = 0;
+var SUBSTEPS = 4; // interpolation sub-steps per integer frame
+
+// Canvas refs
+var srcCv = document.getElementById('srcCv');
+var tmapCv = document.getElementById('tmapCv');
+var waveCv = document.getElementById('waveCv');
+var sigCv = document.getElementById('sigCv');
+
+// ══ Helpers ══
+function getCtx(cv) {
+  var rect = cv.parentElement.getBoundingClientRect();
+  var w = Math.floor(rect.width * 2);
+  var h = Math.floor(rect.height * 2);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return {ctx: cv.getContext('2d'), w: w, h: h};
+}
+
+function tmapColor(v, vmin, vmax) {
+  var t = (v - vmin) / Math.max(vmax - vmin, 1e-8);
+  var r, g, b;
+  if (t < 0.5) { var s = t*2; r = Math.round(33+s*138); g = Math.round(102+s*115); b = Math.round(172+s*61); }
+  else { var s = (t-0.5)*2; r = Math.round(171+s*84); g = Math.round(217-s*169); b = Math.round(233-s*194); }
+  return [r, g, b];
+}
+
+function ampColor(v) {
+  // v in [-1, 1] → blue-black-red
+  var t = (v + 1) / 2;
+  if (t < 0.5) { var s = t*2; return [Math.round(s*30), Math.round(s*40), Math.round(20+s*108)]; }
+  else { var s = (t-0.5)*2; return [Math.round(30+s*210), Math.round(40+s*30), Math.round(128-s*100)]; }
+}
+
+// ══ Load sample ══
+function loadSample(id) {
+  curSample = id;
+  curFrame = 0; lastT = 0;
+  document.getElementById('timeSl').value = 0;
+  var s = D.samples[id];
+  // default selected point: one ~10mm from source
+  selIdx = 16 * G + 16; // centre of plate
+  document.getElementById('sampleInf').innerHTML =
+    '<span>Src <span class=\"hl\">('+s.src[0].toFixed(1)+','+s.src[1].toFixed(1)+')</span></span>'+
+    '<span>Thick <span class=\"hl\">'+Math.min.apply(null,s.thick).toFixed(1)+'–'+Math.max.apply(null,s.thick).toFixed(1)+' mm</span></span>';
+  drawAll();
+}
+
+// ══ Draw thickness map ══
+function drawTmap() {
+  var c = getCtx(tmapCv); var ctx = c.ctx, W = c.w, H = c.h;
+  var s = D.samples[curSample];
+  var tmap = s.tmap, thick = s.thick;
+  var vmin = 1e9, vmax = -1e9;
+  for (var i = 0; i < G*G; i++) { if (tmap[i] < vmin) vmin = tmap[i]; if (tmap[i] > vmax) vmax = tmap[i]; }
+  var cw = W / G, ch = H / G;
+  for (var r = 0; r < G; r++) {
+    for (var col = 0; col < G; col++) {
+      var rgb = tmapColor(tmap[r*G+col], vmin, vmax);
+      ctx.fillStyle = 'rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
+      ctx.fillRect(col*cw, r*ch, cw+0.5, ch+0.5);
+    }
+  }
+  // source star
+  var sx = s.src[0]/31*(G-1)*cw + cw/2, sy = s.src[1]/31*(G-1)*ch + ch/2;
+  ctx.fillStyle = '#f87171'; ctx.beginPath(); ctx.arc(sx, sy, Math.max(3, cw*0.35), 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = Math.max(8, cw*0.7)+'px monospace'; ctx.fillText('★', sx+5, sy+3);
+  // selected point
+  var sr = Math.floor(selIdx/G), sc = selIdx % G;
+  ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2;
+  ctx.strokeRect(sc*cw+1, sr*ch+1, cw-2, ch-2);
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// ══ Draw wave field (bilinear spatial + sub-frame temporal interpolation) ══
+var INTERP_RES = 160; // internal interpolation grid resolution
+
+function drawWave() {
+  var s = D.samples[curSample];
+  var sigs = s.signals;
+  var N = D.n_time;
+
+  var f0 = Math.floor(curFrame), f1 = Math.min(f0 + 1, N - 1);
+  var fracT = curFrame - f0;
+
+  // Render at fixed internal resolution (fast), browser stretches smoothly
+  var IW = INTERP_RES, IH = INTERP_RES;
+  var img = new ImageData(IW, IH);
+  var scaleX = G / IW, scaleY = G / IH;
+
+  for (var py = 0; py < IH; py++) {
+    for (var px = 0; px < IW; px++) {
+      var gx = (px + 0.5) * scaleX, gy = (py + 0.5) * scaleY;
+      gx = gx < 0 ? 0 : (gx > G - 1.001 ? G - 1.001 : gx);
+      gy = gy < 0 ? 0 : (gy > G - 1.001 ? G - 1.001 : gy);
+      var c0 = gx | 0, r0 = gy | 0;
+      var c1 = c0 + 1 < G ? c0 + 1 : G - 1, r1 = r0 + 1 < G ? r0 + 1 : G - 1;
+      var fx = gx - c0, fy = gy - r0;
+
+      var i00 = r0 * G + c0, i10 = r0 * G + c1;
+      var i01 = r1 * G + c0, i11 = r1 * G + c1;
+
+      var v00 = lerp(sigs[i00 * N + f0], sigs[i00 * N + f1], fracT);
+      var v10 = lerp(sigs[i10 * N + f0], sigs[i10 * N + f1], fracT);
+      var v01 = lerp(sigs[i01 * N + f0], sigs[i01 * N + f1], fracT);
+      var v11 = lerp(sigs[i11 * N + f0], sigs[i11 * N + f1], fracT);
+
+      var v = lerp(lerp(v00, v10, fx), lerp(v01, v11, fx), fy);
+      var rgb = ampColor(v);
+      var pi = (py * IW + px) * 4;
+      img.data[pi] = rgb[0]; img.data[pi+1] = rgb[1]; img.data[pi+2] = rgb[2]; img.data[pi+3] = 255;
+    }
+  }
+
+  // Blit to canvas
+  var c = getCtx(waveCv);
+  // draw internal image scaled to full canvas
+  var tmp = document.createElement('canvas'); tmp.width = IW; tmp.height = IH;
+  tmp.getContext('2d').putImageData(img, 0, 0);
+  c.ctx.clearRect(0, 0, c.w, c.h);
+  c.ctx.imageSmoothingEnabled = true;
+  c.ctx.imageSmoothingQuality = 'high';
+  c.ctx.drawImage(tmp, 0, 0, c.w, c.h);
+
+  var cw = c.w / G, ch = c.h / G;
+  var sx = s.src[0]/31*(G-1)*cw + cw/2, sy = s.src[1]/31*(G-1)*ch + ch/2;
+  c.ctx.fillStyle = '#fff'; c.ctx.beginPath(); c.ctx.arc(sx, sy, Math.max(2, cw*0.25), 0, Math.PI*2); c.ctx.fill();
+  var sr = Math.floor(selIdx/G), sc = selIdx % G;
+  c.ctx.strokeStyle = '#fbbf24'; c.ctx.lineWidth = 1.5;
+  c.ctx.strokeRect(sc*cw+1, sr*ch+1, cw-2, ch-2);
+}
+
+// ══ Draw selected point signal ══
+function drawSig() {
+  var c = getCtx(sigCv); var ctx = c.ctx, W = c.w, H = c.h;
+  ctx.clearRect(0, 0, W, H);
+  var s = D.samples[curSample];
+  var sig = s.signals;
+  var N = D.n_time, pad = 10;
+  var off = selIdx * N;
+  ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (var i = 0; i < N; i++) {
+    var x = pad + i/(N-1)*(W-2*pad), y = H/2 - sig[off+i]*(H/2-pad);
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  // interpolated cursor
+  var cx = pad + curFrame/(N-1)*(W-2*pad);
+  ctx.strokeStyle = '#f87171'; ctx.setLineDash([3,3]); ctx.beginPath();
+  ctx.moveTo(cx, pad); ctx.lineTo(cx, H-pad); ctx.stroke(); ctx.setLineDash([]);
+
+  var sr = Math.floor(selIdx/G), sc = selIdx % G;
+  var dx = sc - s.src[0], dy = sr - s.src[1];
+  var dist = Math.sqrt(dx*dx+dy*dy) * 3.125;
+  document.getElementById('pointInf').innerHTML =
+    '<span>Grid <span class=\"hl\">('+sc+','+sr+')</span></span>'+
+    '<span>Dist <span class=\"hl\">'+dist.toFixed(1)+' mm</span></span>'+
+    '<span>Thick <span class=\"hl\">'+s.thick[selIdx].toFixed(2)+' mm</span></span>';
+}
+
+// Interpolated source pulse cursor
+function drawSrc() {
+  var c = getCtx(srcCv); var ctx = c.ctx, W = c.w, H = c.h;
+  ctx.clearRect(0, 0, W, H);
+  var p = D.source_pulse, N = p.length, pad = 8;
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (var i = 0; i < N; i++) {
+    var x = pad + i/(N-1)*(W-2*pad), y = H/2 - p[i]*(H/2-pad);
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  var cx = pad + curFrame/(N-1)*(W-2*pad);
+  ctx.strokeStyle = '#f87171'; ctx.setLineDash([3,3]); ctx.beginPath();
+  ctx.moveTo(cx, pad); ctx.lineTo(cx, H-pad); ctx.stroke(); ctx.setLineDash([]);
+}
+
+function drawAll() {
+  updateTime();
+  drawSrc(); drawTmap(); drawWave(); drawSig();
+}
+
+function updateTime() {
+  var t = curFrame / D.fs * 1e6;
+  document.getElementById('timeVal').textContent = t.toFixed(2)+' μs';
+  document.getElementById('frameVal').textContent = curFrame.toFixed(1);
+}
+
+// ══ Animation (sub-frame interpolation) ══
+function anim(ts) {
+  if (!playing) return;
+  if (!lastT) lastT = ts;
+  var dt = Math.min((ts - lastT) / 1000, 0.1); // seconds, cap at 100ms
+  lastT = ts;
+
+  var sp = parseInt(document.getElementById('speedR').value);
+  var fps = 6 + sp * 2; // frames per second (8–36)
+  var advance = fps * dt; // fractional frames to advance
+
+  curFrame += advance;
+  if (curFrame >= D.n_time) curFrame -= D.n_time;
+  if (curFrame < 0) curFrame += D.n_time;
+
+  document.getElementById('timeSl').value = Math.round(curFrame);
+  drawAll();
+  timer = requestAnimationFrame(anim);
+}
+
+function togglePlay() {
+  playing = !playing;
+  var b = document.getElementById('playBtn');
+  if (playing) {
+    b.textContent = '⏸ Pause'; b.classList.add('on');
+    lastT = 0;
+    timer = requestAnimationFrame(anim);
+  } else {
+    b.textContent = '▶ Play'; b.classList.remove('on');
+    cancelAnimationFrame(timer);
+  }
+}
+
+// ══ Events ══
+document.getElementById('sampleSel').onchange = function() { loadSample(parseInt(this.value)); };
+document.getElementById('playBtn').onclick = togglePlay;
+document.getElementById('stepF10').onclick = function() { curFrame = Math.min(Math.floor(curFrame)+10, D.n_time-1); document.getElementById('timeSl').value = Math.round(curFrame); drawAll(); };
+document.getElementById('stepB10').onclick = function() { curFrame = Math.max(Math.floor(curFrame)-10, 0); document.getElementById('timeSl').value = Math.round(curFrame); drawAll(); };
+document.getElementById('timeSl').oninput = function() { curFrame = parseInt(this.value); drawAll(); };
+
+waveCv.addEventListener('click', function(e) {
+  var rect = waveCv.getBoundingClientRect();
+  var col = Math.floor((e.clientX - rect.left) / rect.width * G);
+  var row = Math.floor((e.clientY - rect.top) / rect.height * G);
+  col = Math.max(0, Math.min(G-1, col)); row = Math.max(0, Math.min(G-1, row));
+  selIdx = row * G + col;
+  var s = D.samples[curSample];
+  var dx = col - s.src[0], dy = row - s.src[1];
+  var dist = Math.sqrt(dx*dx+dy*dy) * 3.125;
+  document.getElementById('selInfo').textContent =
+    'Selected ('+col+','+row+') dist='+dist.toFixed(0)+'mm thick='+s.thick[selIdx].toFixed(2)+'mm';
+  drawTmap(); drawWave(); drawSig();
+});
+
+window.addEventListener('resize', drawAll);
+
+// ══ Init ══
+loadSample(0);
+timer = requestAnimationFrame(anim);
+})();
+</script>
+</body>
+</html>

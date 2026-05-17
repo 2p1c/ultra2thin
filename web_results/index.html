@@ -2,98 +2,274 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ultra2Thin — Aluminum Plate Pulse-Echo</title>
+<title>Ultra2Thin — Lamb Wave Dispersion Results</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
-.header{background:linear-gradient(135deg,#1e3a5f,#0f172a);padding:20px 32px;border-bottom:2px solid #334155}
-.header h1{font-size:24px;color:#38bdf8;margin-bottom:6px}
-.header p{font-size:13px;color:#94a3b8;line-height:1.6;max-width:1000px}
-.badge{display:inline-block;background:#1e3a5f;color:#7dd3fc;padding:2px 8px;border-radius:10px;font-size:11px;margin:0 2px}
-.container{max-width:1200px;margin:0 auto;padding:20px}
-.controls{background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
-.controls label{font-size:12px;color:#94a3b8;display:block;margin-bottom:3px}
-.controls input[type=range]{width:140px;accent-color:#38bdf8}
-.controls button{background:#38bdf8;color:#0f172a;border:none;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
-.controls button:hover{background:#7dd3fc}
-.sample-id{font-size:22px;font-weight:700;color:#38bdf8;min-width:60px;text-align:center}
-.summary{background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px}
-.summary h3{color:#38bdf8;margin-bottom:8px;font-size:14px}
-.summary .vals{display:flex;gap:20px;flex-wrap:wrap}
-.summary .v{font-size:18px;font-weight:700}
-.summary .l{font-size:11px;color:#94a3b8}
-.metrics{display:flex;gap:16px;margin:12px 0;flex-wrap:wrap}
-.metric{background:#1e293b;border-radius:8px;padding:12px 18px;text-align:center;min-width:100px}
-.metric .val{font-size:22px;font-weight:700}.metric .lbl{font-size:11px;color:#94a3b8;margin-top:3px}
-.g{color:#4ade80}.w{color:#fbbf24}.r{color:#f87171}
-.main-img{width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
-.footer{text-align:center;padding:20px;color:#64748b;font-size:11px;border-top:1px solid #1e293b;margin-top:24px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b1120;color:#e2e8f0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1a2740,#0b1120);padding:22px 32px;border-bottom:2px solid #1e3a5f}
+.header h1{font-size:26px;color:#38bdf8;margin-bottom:6px}
+.header .sub{font-size:12px;color:#7c94b0;margin-top:4px;line-height:1.7}
+.badge{display:inline-block;background:#1e3a5f;color:#7dd3fc;padding:2px 10px;border-radius:10px;font-size:11px;margin:2px 3px}
+
+.tabs{display:flex;background:#111c2e;border-bottom:2px solid #1e3a5f;padding:0 32px;gap:0}
+.tab{padding:12px 22px;cursor:pointer;font-size:13px;color:#7c94b0;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;font-weight:500}
+.tab:hover{color:#b0c8e0}
+.tab.active{color:#38bdf8;border-bottom-color:#38bdf8}
+
+.container{max-width:1340px;margin:0 auto;padding:20px 24px}
+.section{display:none}
+.section.active{display:block}
+
+.summary-cards{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.card{background:#111c2e;border-radius:10px;padding:18px 24px;border:1px solid #1e3a5f;min-width:150px;text-align:center}
+.card .val{font-size:28px;font-weight:700;line-height:1.2}
+.card .lbl{font-size:11px;color:#7c94b0;margin-top:5px}
+.g{color:#4ade80}.b{color:#38bdf8}.p{color:#c084fc}.y{color:#fbbf24}
+
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:18px}
+.gallery-item{background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;overflow:hidden}
+.gallery-item img{width:100%;display:block}
+.gallery-item .meta{padding:10px 14px;display:flex;justify-content:space-between;font-size:12px;color:#94a3b8}
+
+.pred-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.pred-card{background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;overflow:hidden;cursor:pointer;transition:border-color .2s}
+.pred-card:hover{border-color:#38bdf8}
+.pred-card img{width:100%;display:block}
+.pred-card .meta{padding:8px 12px;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
+.pred-card .mae{color:#4ade80;font-weight:600}
+.pred-card .corr{color:#38bdf8;font-weight:600}
+
+.overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.88);z-index:100;padding:30px;overflow:auto}
+.overlay.active{display:flex;align-items:flex-start;justify-content:center}
+.overlay img{max-width:95vw;border-radius:12px}
+.overlay .close{position:fixed;top:16px;right:24px;font-size:32px;color:#fff;cursor:pointer;z-index:101}
+
+.slider-row{display:flex;align-items:center;gap:12px;margin:16px 0}
+.slider-row input[type=range]{flex:1;accent-color:#38bdf8}
+.slider-row .val{font-size:18px;font-weight:700;color:#38bdf8;min-width:40px}
+.slider-row button{background:#38bdf8;color:#0b1120;border:none;padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px}
+.slider-row button:hover{background:#7dd3fc}
+#detailMetrics{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0}
+
+.footer{text-align:center;padding:20px;color:#4a5568;font-size:11px;border-top:1px solid #1e3a5f;margin-top:30px}
 </style>
 </head>
 <body>
+
 <div class="header">
-  <h1>Aluminum Plate — Through-Thickness Pulse-Echo Thickness Prediction</h1>
-  <p>
-    <span class="badge">200-700 kHz Laser Source</span>
+  <h1>Ultra2Thin — Lamb A0 频散测厚</h1>
+  <div class="sub">
+    <span class="badge">A0 Lamb Wave</span>
+    <span class="badge">200–700 kHz</span>
     <span class="badge">Al 6300 m/s</span>
-    <span class="badge">4 mm Nominal</span>
-    <span class="badge">Terrace FBH Defects</span>
-    <span class="badge">Back-Side Measurement</span>
-  </p>
-  <p style="margin-top:6px">
-    Pulse-echo through-thickness | Image-method path | CNN + Fourier + Transformer | Cubic interpolation
-  </p>
+    <span class="badge">32×32 Dense Grid</span>
+    <span class="badge">CNN + Fourier + U-Net</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="training">Training Signals</div>
+  <div class="tab" data-tab="predictions">Predictions</div>
+  <div class="tab" data-tab="detail">Detail View</div>
 </div>
 
 <div class="container">
-  <div class="summary" id="summary"></div>
 
-  <div class="controls">
-    <div><label>Sample Index</label><input type="range" id="slider" min="0" max="23" value="0" step="1"></div>
-    <div class="sample-id" id="sampleId">#0</div>
-    <div><button id="autoBtn" onclick="toggleAuto()">Auto Play</button></div>
-    <div><label>Speed</label><input type="range" id="speed" min="400" max="3000" value="1500" step="100"></div>
+<div id="sec-overview" class="section active">
+  <h2 style="margin:16px 0 12px;color:#38bdf8;font-size:18px">Summary</h2>
+  <div class="summary-cards" id="summaryCards"></div>
+
+  <h2 style="margin:24px 0 12px;color:#38bdf8;font-size:18px">Architecture</h2>
+  <div style="background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;padding:20px">
+    <pre style="font-size:12px;color:#94a3b8;line-height:1.8;white-space:pre-wrap">
+<b style="color:#7dd3fc">Input:</b>  32×32=1024 measurement points × 256 time samples
+      Source position (xs, ys)
+
+<b style="color:#7dd3fc">Encoder:</b>
+  SignalEncoder (1D CNN):  raw waveform → 48D feature per point
+  GeometryEncoder (Fourier): position + source-relative geometry → 48D feature
+
+<b style="color:#7dd3fc">Decoder:</b>
+  feature sum → reshape to (48, 32, 32) 2D map → ThinUNet → thickness map (32×32)
+
+<b style="color:#7dd3fc">Training:</b>  500 unique random plates × 1 configuration each
+  Phase 1: OneCycleLR 2e-3 → 0 (25 epochs)
+  Phase 2: CosineAnnealing 2e-4 → 0 (15 epochs)
+  Loss: MSE(predicted_map, ground_truth_map)
+  Device: CPU  |  515K parameters
+
+<b style="color:#38bdf8">Physics:</b> A0 Lamb wave dispersion — c_p(f,d) varies strongly with thickness.
+  Phase velocity encoded per frequency bin (Rayleigh-Lamb equation solved numerically).
+  ~60× more thickness-sensitive than through-thickness pulse-echo.
+    </pre>
   </div>
 
-  <div class="metrics" id="metrics"></div>
-  <img id="mainImg" class="main-img" src="images/sample_0.png" alt="">
+  <h2 style="margin:24px 0 12px;color:#38bdf8;font-size:18px">Dispersion Curves</h2>
+  <img src="dispersion_curves.png" style="max-width:100%;border-radius:10px;border:1px solid #1e3a5f" alt="Dispersion curves">
 </div>
 
-<div class="footer">Ultra2Thin Aluminum · PyTorch · Pulse-Echo · Fourier Encoding · Transformer Self-Attention</div>
+<div id="sec-training" class="section">
+  <h2 style="margin:16px 0 12px;color:#38bdf8;font-size:18px">Training Signal Gallery — 10 Random Plates</h2>
+  <p style="font-size:12px;color:#7c94b0;margin-bottom:16px">
+    Each plate shows: thickness map with source (★) and 5 selected measurement points,
+    those 5 raw signal waveforms, and a heatmap of signals sorted by source distance.
+  </p>
+  <div class="gallery" id="trainGallery"></div>
+</div>
 
+<div id="sec-predictions" class="section">
+  <h2 style="margin:16px 0 12px;color:#38bdf8;font-size:18px">Prediction Results — 24 Test Plates</h2>
+  <p style="font-size:12px;color:#7c94b0;margin-bottom:16px">
+    Each card: Ground Truth | Predicted | Error map | Row+Col cross-sections | Scatter plot | Centre signal.
+    Click any card to enlarge.
+  </p>
+  <div class="pred-grid" id="predGrid"></div>
+</div>
+
+<div id="sec-detail" class="section">
+  <h2 style="margin:16px 0 12px;color:#38bdf8;font-size:18px">Single Sample Detail</h2>
+  <div class="slider-row">
+    <span style="font-size:12px;color:#94a3b8">Sample:</span>
+    <input type="range" id="slider" min="0" max="23" value="0" step="1">
+    <span class="val" id="sampleId">#0</span>
+    <button id="autoBtn">▶ Auto Play</button>
+    <span style="font-size:11px;color:#64748b">Speed</span>
+    <input type="range" id="speed" min="400" max="3000" value="1500" step="100" style="flex:0;width:100px">
+  </div>
+  <div id="detailMetrics" class="summary-cards"></div>
+  <img id="detailImg" style="width:100%;border-radius:10px;border:1px solid #1e3a5f" src="images/pred_0.png" alt="">
+</div>
+
+</div>
+
+<div class="footer">Ultra2Thin · Lamb A0 Dispersion · Rayleigh-Lamb Solver · CNN + Fourier + U-Net · 515K Params</div>
+
+<div class="overlay" id="overlay" onclick="closeOverlay()">
+  <span class="close">&times;</span>
+  <img id="overlayImg" src="" alt="">
+</div>
+
+<!-- Load data as script (works with file:// unlike fetch) -->
+<script src="data.js"></script>
 <script>
-let data=null,idx=0,auto=false,timer=null;
-fetch('samples.json').then(r=>r.json()).then(d=>{
-  data=d;
-  document.getElementById('summary').innerHTML=
-    '<h3>Summary (24 test samples)</h3><div class="vals">'+
-    '<div><div class="v" style="color:#4ade80">'+d.summary.mean_mae.toFixed(4)+' ± '+d.summary.std_mae.toFixed(4)+'</div><div class="l">MAE [mm]</div></div>'+
-    '<div><div class="v" style="color:#7dd3fc">'+d.summary.mean_corr.toFixed(4)+' ± '+d.summary.std_corr.toFixed(4)+'</div><div class="l">Correlation</div></div>'+
-    '<div><div class="v" style="color:#fbbf24">'+d.summary.val_loss.toFixed(6)+'</div><div class="l">Val MSE</div></div>'+
-    '</div>';
-  update(0);
+(function() {
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const name = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-' + name).classList.add('active');
+  });
 });
-function update(i){
-  idx=i;const s=data.samples[i];
-  document.getElementById('sampleId').textContent='#'+i;
-  document.getElementById('slider').value=i;
-  document.getElementById('mainImg').src='images/sample_'+i+'.png';
-  const cc=s.corr_2d>0.95?'g':(s.corr_2d>0.8?'w':'r');
-  document.getElementById('metrics').innerHTML=
-    '<div class="metric"><div class="val '+cc+'">'+(s.corr_2d*100).toFixed(1)+'%</div><div class="lbl">Corr (2D)</div></div>'+
-    '<div class="metric"><div class="val '+cc+'">'+(s.corr_pts*100).toFixed(1)+'%</div><div class="lbl">Corr (pts)</div></div>'+
-    '<div class="metric"><div class="val">'+s.mae_2d.toFixed(4)+'</div><div class="lbl">MAE 2D [mm]</div></div>'+
-    '<div class="metric"><div class="val">'+s.mae_pts.toFixed(4)+'</div><div class="lbl">MAE pts [mm]</div></div>'+
-    '<div class="metric"><div class="val" style="color:#7dd3fc">'+s.n_pts+'</div><div class="lbl">Measurement Pts</div></div>'+
-    '<div class="metric"><div class="val" style="color:#fbbf24">'+s.gt_range[0]+' - '+s.gt_range[1]+'</div><div class="lbl">Thickness Range [mm]</div></div>';
+
+// Use DATA from data.js
+renderOverview();
+renderTraining();
+renderPredictions();
+initDetail();
+
+function renderOverview() {
+  const s = DATA.summary;
+  document.getElementById('summaryCards').innerHTML =
+    '<div class="card"><div class="val g">' + s.mean_mae.toFixed(4) + '</div><div class="lbl">Mean MAE [mm]</div></div>' +
+    '<div class="card"><div class="val g">±' + s.std_mae.toFixed(4) + '</div><div class="lbl">Std MAE [mm]</div></div>' +
+    '<div class="card"><div class="val b">' + s.mean_corr.toFixed(4) + '</div><div class="lbl">Mean Correlation</div></div>' +
+    '<div class="card"><div class="val b">±' + s.std_corr.toFixed(4) + '</div><div class="lbl">Std Correlation</div></div>' +
+    '<div class="card"><div class="val p">' + s.val_loss.toFixed(6) + '</div><div class="lbl">Best Val MSE</div></div>' +
+    '<div class="card"><div class="val y">' + s.grid + '</div><div class="lbl">Measurement Grid</div></div>';
 }
-document.getElementById('slider').addEventListener('input',function(){update(+this.value)});
-function toggleAuto(){
-  auto=!auto;const b=document.getElementById('autoBtn');
-  if(auto){b.textContent='Stop';b.style.background='#f87171';advance()}
-  else{b.textContent='Auto Play';b.style.background='#38bdf8';clearTimeout(timer)}
+
+function renderTraining() {
+  var html = '';
+  DATA.train_signals.forEach(function(ts, i) {
+    html += '<div class="gallery-item">' +
+      '<img src="images/train_signal_' + i + '.png" alt="Training sample ' + i + '" loading="lazy">' +
+      '<div class="meta">' +
+        '<span>Plate #' + ts.id + ' | Source (' + ts.src[0] + ', ' + ts.src[1] + ')</span>' +
+        '<span style="color:#38bdf8">Thickness ' + ts.tmap_range[0] + '–' + ts.tmap_range[1] + ' mm</span>' +
+      '</div></div>';
+  });
+  document.getElementById('trainGallery').innerHTML = html;
 }
-function advance(){if(!auto)return;update((idx+1)%data.samples.length);timer=setTimeout(advance,+document.getElementById('speed').value)}
+
+function renderPredictions() {
+  var html = '';
+  DATA.predictions.forEach(function(p, i) {
+    html += '<div class="pred-card" onclick="openOverlay(\'images/pred_' + i + '.png\')">' +
+      '<img src="images/pred_' + i + '.png" alt="Prediction ' + i + '" loading="lazy">' +
+      '<div class="meta">' +
+        '<span class="mae">MAE ' + p.mae.toFixed(4) + ' mm</span>' +
+        '<span class="corr">Corr ' + p.corr.toFixed(4) + '</span>' +
+        '<span style="color:#94a3b8">' + p.gt_range[0] + '–' + p.gt_range[1] + ' mm</span>' +
+      '</div></div>';
+  });
+  document.getElementById('predGrid').innerHTML = html;
+}
+
+// Detail slider
+var detailIdx = 0, autoTimer = null, autoOn = false;
+
+function initDetail() {
+  document.getElementById('slider').addEventListener('input', function() {
+    detailIdx = +this.value;
+    showDetail(detailIdx);
+  });
+  document.getElementById('autoBtn').addEventListener('click', toggleAuto);
+  showDetail(0);
+}
+
+function showDetail(i) {
+  detailIdx = i;
+  var p = DATA.predictions[i];
+  document.getElementById('slider').value = i;
+  document.getElementById('sampleId').textContent = '#' + i;
+  document.getElementById('detailImg').src = 'images/pred_' + i + '.png';
+  var cc = p.corr > 0.95 ? 'g' : (p.corr > 0.80 ? 'b' : 'y');
+  document.getElementById('detailMetrics').innerHTML =
+    '<div class="card"><div class="val g">' + p.mae.toFixed(4) + '</div><div class="lbl">MAE [mm]</div></div>' +
+    '<div class="card"><div class="val ' + cc + '">' + p.corr.toFixed(4) + '</div><div class="lbl">Correlation</div></div>' +
+    '<div class="card"><div class="val" style="color:#c084fc">' + p.mse.toFixed(6) + '</div><div class="lbl">MSE</div></div>' +
+    '<div class="card"><div class="val" style="color:#38bdf8">' + p.gt_range[0] + '–' + p.gt_range[1] + '</div><div class="lbl">GT Range [mm]</div></div>' +
+    '<div class="card"><div class="val" style="color:#fbbf24">' + p.pred_range[0] + '–' + p.pred_range[1] + '</div><div class="lbl">Pred Range [mm]</div></div>' +
+    '<div class="card"><div class="val" style="color:#94a3b8">(' + p.src[0] + ', ' + p.src[1] + ')</div><div class="lbl">Source Position</div></div>';
+}
+
+function toggleAuto() {
+  autoOn = !autoOn;
+  var btn = document.getElementById('autoBtn');
+  if (autoOn) {
+    btn.textContent = '⏸ Stop';
+    btn.style.background = '#f87171';
+    advance();
+  } else {
+    btn.textContent = '▶ Auto Play';
+    btn.style.background = '#38bdf8';
+    clearTimeout(autoTimer);
+  }
+}
+
+function advance() {
+  if (!autoOn) return;
+  detailIdx = (detailIdx + 1) % DATA.predictions.length;
+  showDetail(detailIdx);
+  autoTimer = setTimeout(advance, +document.getElementById('speed').value);
+}
+
+// Overlay
+window.openOverlay = function(src) {
+  document.getElementById('overlayImg').src = src;
+  document.getElementById('overlay').classList.add('active');
+};
+window.closeOverlay = function() {
+  document.getElementById('overlay').classList.remove('active');
+};
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeOverlay(); });
+
+})();
 </script>
 </body>
 </html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ablation Study — Transformer vs No Transformer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b1120;color:#e2e8f0;min-height:100vh}
+.bar{background:linear-gradient(135deg,#1a2740,#0b1120);padding:18px 28px;border-bottom:2px solid #1e3a5f}
+.bar h1{font-size:22px;color:#38bdf8}.bar p{font-size:12px;color:#7c94b0;margin-top:4px}
+.container{max-width:1100px;margin:0 auto;padding:20px}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.card{background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;padding:18px}
+.card h3{font-size:14px;margin-bottom:12px}
+.card.w h3{color:#38bdf8}.card.n h3{color:#c084fc}
+.metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.metric{text-align:center;padding:6px}.metric .v{font-size:22px;font-weight:700}.metric .l{font-size:10px;color:#7c94b0;margin-top:2px}
+.g{color:#4ade80}.b{color:#38bdf8}.p{color:#c084fc}
+.winner{border:2px solid #4ade80 !important}
+.compare-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}
+.compare-table th{background:#111c2e;color:#7c94b0;padding:10px 14px;text-align:left;border-bottom:1px solid #1e3a5f}
+.compare-table td{padding:10px 14px;border-bottom:1px solid #0f1a2e}
+.best{color:#4ade80;font-weight:700}
+.gallery{margin-top:24px}
+.gallery img{width:100%;border-radius:8px;margin-bottom:12px;border:1px solid #1e3a5f}
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.gallery-card{background:#111c2e;border-radius:8px;border:1px solid #1e3a5f;overflow:hidden;cursor:pointer}
+.gallery-card:hover{border-color:#38bdf8}
+.gallery-card img{width:100%;display:block;border:none;margin:0}
+.gallery-card .meta{padding:8px 10px;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between}
+
+.slider-row{display:flex;align-items:center;gap:12px;margin:16px 0}
+.slider-row input[type=range]{flex:1;accent-color:#38bdf8}
+.slider-row .val{font-size:18px;font-weight:700;color:#38bdf8;min-width:40px}
+.slider-row button{background:#38bdf8;color:#0b1120;border:none;padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px}
+
+.overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.88);z-index:100;padding:30px;overflow:auto}
+.overlay.active{display:flex;align-items:flex-start;justify-content:center}
+.overlay img{max-width:95vw;border-radius:12px}
+.overlay .close{position:fixed;top:16px;right:24px;font-size:32px;color:#fff;cursor:pointer;z-index:101}
+
+.tabs{display:flex;gap:0;margin-bottom:16px}
+.tab{padding:8px 18px;cursor:pointer;font-size:12px;color:#7c94b0;background:#111c2e;border:1px solid #1e3a5f;border-radius:6px 6px 0 0;margin-right:-1px}
+.tab.active{color:#38bdf8;background:#1a2740;border-color:#38bdf8}
+.section{display:none}.section.active{display:block}
+
+.conclusion{background:#111c2e;border-radius:10px;border:1px solid #1e3a5f;padding:18px;margin-top:20px}
+.conclusion h3{color:#4ade80;margin-bottom:8px}
+.conclusion p{font-size:13px;color:#94a3b8;line-height:1.7}
+
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>Ablation: Transformer vs No Transformer (1D Dense)</h1>
+  <p>Same data (4000 train + 800 val), same Conv1d decoder. Only difference: Transformer before decoder.</p>
+</div>
+
+<div class="container">
+
+<div class="summary">
+  <div class="card w">
+    <h3>With Transformer</h3>
+    <div class="metrics" id="tMetrics"></div>
+  </div>
+  <div class="card n winner">
+    <h3>No Transformer ★ Best</h3>
+    <div class="metrics" id="nMetrics"></div>
+  </div>
+</div>
+
+<table class="compare-table">
+  <tr><th>Metric</th><th>With Transformer</th><th>No Transformer</th><th>Winner</th></tr>
+  <tbody id="compRows"></tbody>
+</table>
+
+<div class="conclusion">
+  <h3>Conclusion</h3>
+  <p>
+    The Transformer is <b>unnecessary and slightly harmful</b> for 1D dense prediction.
+    Removing it: (1) cuts parameters 3.7× (1.77M → 476K), (2) improves MAE 40% (0.048 → 0.029mm),
+    (3) trains faster (no O(N²) self-attention on 64 points).
+    <br><br>
+    <b>Why:</b> With a dense 64-point grid and kernel-5 Conv1d, the spatial context
+    (±8 cells after 4 layers) is sufficient for thickness prediction. The Transformer's
+    global attention adds trainable variance without providing information that the
+    Conv1d decoder can't already extract from the dense, regular measurement grid.
+    <br><br>
+    <b>Recommendation:</b> Drop the Transformer for 1D COMSOL cross-section training.
+    Use SignalEncoder + GeometryEncoder → Conv1d decoder directly.
+  </p>
+</div>
+
+<div class="tabs" style="margin-top:24px">
+  <div class="tab active" data-tab="gallery">Side-by-Side Gallery</div>
+  <div class="tab" data-tab="detail">Detail View</div>
+</div>
+
+<div id="sec-gallery" class="section active">
+  <div class="gallery-grid" id="ablGrid"></div>
+</div>
+
+<div id="sec-detail" class="section">
+  <div class="slider-row">
+    <span style="font-size:12px;color:#94a3b8">Sample:</span>
+    <input type="range" id="slider" min="0" max="23" value="0" step="1">
+    <span class="val" id="sampleId">#0</span>
+    <button id="autoBtn">▶ Auto Play</button>
+  </div>
+  <img id="detailImg" style="width:100%;border-radius:10px" src="images_ablation/abl_0.png">
+</div>
+
+</div>
+
+<div class="overlay" id="overlay" onclick="closeOverlay()">
+  <span class="close">&times;</span>
+  <img id="overlayImg" src="">
+</div>
+
+<script src="ablation_data.js"></script>
+<script>
+(function(){var D=ABL;
+// Tabs
+document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){
+  var n=this.dataset.tab;
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+  this.classList.add('active');
+  document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});
+  document.getElementById('sec-'+n).classList.add('active');
+})});
+
+var st=D.summary.transformer, sn=D.summary.no_transformer;
+document.getElementById('tMetrics').innerHTML=
+  '<div class="metric"><div class="v b">'+st.mean_mae.toFixed(4)+'</div><div class="l">MAE [mm]</div></div>'+
+  '<div class="metric"><div class="v b">'+st.mean_corr.toFixed(4)+'</div><div class="l">Correlation</div></div>'+
+  '<div class="metric"><div class="v" style="color:#94a3b8">'+(st.params/1e6).toFixed(2)+'M</div><div class="l">Parameters</div></div>';
+document.getElementById('nMetrics').innerHTML=
+  '<div class="metric"><div class="v g">'+sn.mean_mae.toFixed(4)+'</div><div class="l">MAE [mm]</div></div>'+
+  '<div class="metric"><div class="v g">'+sn.mean_corr.toFixed(4)+'</div><div class="l">Correlation</div></div>'+
+  '<div class="metric"><div class="v g">'+(sn.params/1e6).toFixed(2)+'M</div><div class="l">Parameters</div></div>';
+
+document.getElementById('compRows').innerHTML=
+  '<tr><td>MAE [mm]</td><td>'+st.mean_mae.toFixed(4)+'</td><td class="best">'+sn.mean_mae.toFixed(4)+'</td><td class="best">No Transformer</td></tr>'+
+  '<tr><td>Correlation</td><td>'+st.mean_corr.toFixed(4)+'</td><td class="best">'+sn.mean_corr.toFixed(4)+'</td><td class="best">No Transformer</td></tr>'+
+  '<tr><td>Parameters</td><td>'+(st.params/1e6).toFixed(2)+'M</td><td class="best">'+(sn.params/1e6).toFixed(2)+'M</td><td class="best">No Transformer (3.7× fewer)</td></tr>'+
+  '<tr><td>Val MSE</td><td>'+st.val_loss.toFixed(6)+'</td><td class="best">'+sn.val_loss.toFixed(6)+'</td><td class="best">No Transformer (2.3× better)</td></tr>';
+
+// Gallery
+var html='';
+D.samples.forEach(function(s,i){
+  html+='<div class="gallery-card" onclick="openOverlay(\'images_ablation/abl_'+i+'.png\')">'+
+    '<img src="images_ablation/abl_'+i+'.png" loading="lazy">'+
+    '<div class="meta"><span style="color:#38bdf8">T MAE '+s.mae_t.toFixed(4)+'</span><span style="color:#c084fc">N MAE '+s.mae_n.toFixed(4)+'</span><span>'+s.t_range[0]+'–'+s.t_range[1]+'mm</span></div></div>';
+});
+document.getElementById('ablGrid').innerHTML=html;
+
+// Detail slider
+var idx=0,timer=null,playing=false;
+function showDetail(i){idx=i;
+  var s=D.samples[i];
+  document.getElementById('slider').value=i; document.getElementById('sampleId').textContent='#'+i;
+  document.getElementById('detailImg').src='images_ablation/abl_'+i+'.png';
+}
+document.getElementById('slider').addEventListener('input',function(){showDetail(+this.value)});
+document.getElementById('autoBtn').addEventListener('click',function(){
+  playing=!playing;
+  document.getElementById('autoBtn').textContent=playing?'⏸ Stop':'▶ Auto Play';
+  if(playing)advance();else clearTimeout(timer);
+});
+function advance(){if(!playing)return;idx=(idx+1)%D.samples.length;showDetail(idx);timer=setTimeout(advance,1500)}
+showDetail(0);
+window.openOverlay=function(s){document.getElementById('overlayImg').src=s;document.getElementById('overlay').classList.add('active')};
+window.closeOverlay=function(){document.getElementById('overlay').classList.remove('active')};
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeOverlay()});
+})();
+</script>
+</body>
+</html>
